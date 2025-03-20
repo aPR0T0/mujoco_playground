@@ -13,64 +13,91 @@
 # limitations under the License.
 # ==============================================================================
 # pylint: disable=line-too-long
-"""Logitech F710 Gamepad class that uses HID under the hood.
+"""Gamepad class that uses Pygame under the hood.
 
-Adapted from motion_imitation: https://github.com/erwincoumans/motion_imitation/tree/master/motion_imitation/robots/gamepad/gamepad_reader.py.
+Adapted to use Pygame joystick interface similar to joystick_bt_sender.py.
 """
 import threading
 import time
 
-import hid
+import pygame
 import numpy as np
 
 
-def _interpolate(value, old_max, new_scale, deadzone=0.01):
-  ret = value * new_scale / old_max
-  if abs(ret) < deadzone:
-    return 0.0
-  return ret
+# Filtering parameters similar to joystick_bt_sender.py
+RC = 0.1  # Response time constant (lower = more responsive, higher = smoother)
+DT = 1 / 50  # Loop time (50Hz update rate)
+
+# Default joystick axes (works with most controllers)
+J1_HORIZONTAL, J1_VERTICAL = 0, 1
+J2_HORIZONTAL = 3  # Yaw rate
+
+
+class FirstOrderFilter:
+    """ First-order low-pass filter for smooth joystick control """
+    def __init__(self, x0, rc, dt, initialized=True):
+        self.x = x0
+        self.dt = dt
+        self.update_alpha(rc)
+        self.initialized = initialized
+
+    def update_alpha(self, rc):
+        self.alpha = self.dt / (rc + self.dt)
+
+    def update(self, x):
+        if self.initialized:
+            self.x = (1. - self.alpha) * self.x + self.alpha * x
+        else:
+            self.initialized = True
+            self.x = x
+        return self.x
 
 
 class Gamepad:
-  """Gamepad class that reads from a Logitech F710 gamepad."""
+  """Gamepad class that reads from a Pygame-compatible gamepad."""
 
   def __init__(
       self,
-      vendor_id=0x046D,
-      product_id=0xC219,
       vel_scale_x=0.4,
       vel_scale_y=0.4,
       vel_scale_rot=1.0,
+      joystick_id=0,
   ):
-    self._vendor_id = vendor_id
-    self._product_id = product_id
     self._vel_scale_x = vel_scale_x
     self._vel_scale_y = vel_scale_y
     self._vel_scale_rot = vel_scale_rot
+    self._joystick_id = joystick_id
 
     self.vx = 0.0
     self.vy = 0.0
     self.wz = 0.0
     self.is_running = True
 
-    self._device = None
+    # Initialize filters
+    self.filter_x = FirstOrderFilter(0.0, RC, DT)
+    self.filter_y = FirstOrderFilter(0.0, RC, DT)
+    self.filter_yaw = FirstOrderFilter(0.0, RC, DT)
 
+    # Pygame setup
+    pygame.init()
+    pygame.joystick.init()
+    self._joystick = None
+    
     self.read_thread = threading.Thread(target=self.read_loop, daemon=True)
     self.read_thread.start()
 
   def _connect_device(self):
     try:
-      self._device = hid.device()
-      self._device.open(self._vendor_id, self._product_id)
-      self._device.set_nonblocking(True)
-      print(
-          "Connected to"
-          f" {self._device.get_manufacturer_string()} "
-          f"{self._device.get_product_string()}"
-      )
+      if pygame.joystick.get_count() == 0:
+        print("No joystick detected.")
+        return False
+        
+      self._joystick = pygame.joystick.Joystick(self._joystick_id)
+      self._joystick.init()
+      print(f"Connected to {self._joystick.get_name()}")
       return True
-    except (hid.HIDException, OSError) as e:
-      print(f"Error connecting to device: {e}")
+    except pygame.error as e:
+      print(f"Error connecting to joystick: {e}")
       return False
 
   def read_loop(self):
@@ -79,23 +106,31 @@ class Gamepad:
       return
 
     while self.is_running:
-      try:
-        data = self._device.read(64)
-        if data:
-          self.update_command(data)
-      except (hid.HIDException, OSError) as e:
-        print(f"Error reading from device: {e}")
+      pygame.event.pump()  # Update joystick states
+      self.update_command()
+      time.sleep(DT)
 
-    self._device.close()
+    # Clean up
+    if self._joystick:
+      self._joystick.quit()
+    pygame.quit()
 
-  def update_command(self, data):
-    left_x = -(data[1] - 128) / 128.0
-    left_y = -(data[2] - 128) / 128.0
-    right_x = -(data[3] - 128) / 128.0
+  def update_command(self):
+    if not self._joystick:
+      return
+      
+    try:
+      # Get raw values from joystick
+      raw_y = -self._joystick.get_axis(J1_VERTICAL)  # Invert to match convention
+      raw_x = self._joystick.get_axis(J1_HORIZONTAL)
+      raw_yaw = self._joystick.get_axis(J2_HORIZONTAL)
 
-    self.vx = _interpolate(left_y, 1.0, self._vel_scale_x)
-    self.vy = _interpolate(left_x, 1.0, self._vel_scale_y)
-    self.wz = _interpolate(right_x, 1.0, self._vel_scale_rot)
+      # Apply first-order filter for smoother transitions
+      self.vx = self.filter_x.update(raw_y) * self._vel_scale_x
+      self.vy = self.filter_y.update(raw_x) * self._vel_scale_y
+      self.wz = self.filter_yaw.update(raw_yaw) * self._vel_scale_rot
+    except pygame.error as e:
+      print(f"Error reading joystick: {e}")
 
   def get_command(self):
     return np.array([self.vx, self.vy, self.wz])
@@ -106,6 +141,12 @@ class Gamepad:
 
 if __name__ == "__main__":
   gamepad = Gamepad()
-  while True:
-    print(gamepad.get_command())
-    time.sleep(0.1)
+  try:
+    while True:
+      command = gamepad.get_command()
+      print(f"vx: {command[0]:.2f}, vy: {command[1]:.2f}, wz: {command[2]:.2f}")
+      time.sleep(0.1)
+  except KeyboardInterrupt:
+    print("\nStopping gamepad reader...")
+  finally:
+    gamepad.stop()

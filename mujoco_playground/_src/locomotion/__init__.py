@@ -26,6 +26,8 @@ from mujoco_playground._src.locomotion.apollo import joystick as apollo_joystick
 from mujoco_playground._src.locomotion.barkour import joystick as barkour_joystick
 from mujoco_playground._src.locomotion.berkeley_humanoid import joystick as berkeley_humanoid_joystick
 from mujoco_playground._src.locomotion.berkeley_humanoid import randomize as berkeley_humanoid_randomize
+from mujoco_playground._src.locomotion.miniv2 import joystick as miniv2_joystick
+from mujoco_playground._src.locomotion.miniv2 import randomize as miniv2_randomize
 from mujoco_playground._src.locomotion.g1 import joystick as g1_joystick
 from mujoco_playground._src.locomotion.g1 import randomize as g1_randomize
 from mujoco_playground._src.locomotion.go1 import getup as go1_getup
@@ -73,6 +75,7 @@ _envs = {
     "H1InplaceGaitTracking": h1_inplace_gait_tracking.InplaceGaitTracking,
     "H1JoystickGaitTracking": h1_joystick_gait_tracking.JoystickGaitTracking,
     "Op3Joystick": op3_joystick.Joystick,
+    "Mini2Joystick": miniv2_joystick.Joystick,
     "SpotFlatTerrainJoystick": functools.partial(
         spot_joystick.Joystick, task="flat_terrain"
     ),
@@ -107,6 +110,7 @@ _cfgs = {
     "H1InplaceGaitTracking": h1_inplace_gait_tracking.default_config,
     "H1JoystickGaitTracking": h1_joystick_gait_tracking.default_config,
     "Op3Joystick": op3_joystick.default_config,
+    "Mini2Joystick": miniv2_joystick.default_config,
     "SpotFlatTerrainJoystick": spot_joystick.default_config,
     "SpotGetup": spot_getup.default_config,
     "SpotJoystickGaitTracking": spot_joystick_gait_tracking.default_config,

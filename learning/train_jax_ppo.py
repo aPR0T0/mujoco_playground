@@ -44,6 +44,7 @@ from mujoco_playground import wrapper
 from mujoco_playground.config import dm_control_suite_params
 from mujoco_playground.config import locomotion_params
 from mujoco_playground.config import manipulation_params
+from mujoco_playground.experimental.export_onnx import export_onnx
 
 xla_flags = os.environ.get("XLA_FLAGS", "")
 xla_flags += " --xla_gpu_triton_gemm_any=True"
@@ -83,7 +84,7 @@ _USE_WANDB = flags.DEFINE_boolean(
     "Use Weights & Biases for logging (ignored in play-only mode)",
 )
 _USE_TB = flags.DEFINE_boolean(
-    "use_tb", False, "Use TensorBoard for logging (ignored in play-only mode)"
+    "use_tb", True, "Use TensorBoard for logging (ignored in play-only mode)"
 )
 _DOMAIN_RANDOMIZATION = flags.DEFINE_boolean(
     "domain_randomization", False, "Use domain randomization"
@@ -317,6 +318,21 @@ def main(argv):
   # Save environment configuration
   with open(ckpt_path / "config.json", "w", encoding="utf-8") as fp:
     json.dump(env_cfg.to_dict(), fp, indent=4)
+
+  # Define policy parameters function for saving checkpoints
+  def policy_params_fn(current_step, make_policy, params, obs_size=env.observation_size["state"][0], action_size=env.action_size):  # pylint: disable=unused-argument
+    orbax_checkpointer = ocp.PyTreeCheckpointer()
+    save_args = orbax_utils.save_args_from_target(params)
+    path = ckpt_path / f"{current_step}"
+    orbax_checkpointer.save(path, params, force=True, save_args=save_args)
+
+    export_onnx(
+        params,
+        action_size,
+        ppo_params,
+        obs_size,
+        output_path="policy.onnx"
+    )
 
   training_params = dict(ppo_params)
   if "network_factory" in training_params:

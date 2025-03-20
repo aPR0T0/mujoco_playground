@@ -211,6 +211,31 @@ def main(argv):
   # We’ll assume your environment’s observation is in state.obs["state"].
   obs_torch = wrapper_torch._jax_to_torch(state.obs["state"])
 
+  class NormalizedPolicyWrapper(torch.nn.Module):
+    def __init__(self, normalizer, actor_critic):
+        super().__init__()
+        self.normalizer = normalizer
+        self.actor_critic = actor_critic
+
+    def forward(self, obs):
+        norm_obs = self.normalizer(obs)
+        return self.actor_critic.act_inference(norm_obs)
+
+    # Create the wrapper
+  model = NormalizedPolicyWrapper(runner.obs_normalizer, runner.alg.actor_critic)
+
+  # Export ONNX
+  dummy_input = torch.randn_like(obs_torch)
+  torch.onnx.export(
+      model,
+      dummy_input,
+      "policy.onnx",
+      input_names=["obs"],
+      output_names=["continuous_actions"],
+      opset_version=11
+  )
+  print("Exported full policy policy.onnx")
+
   for _ in range(env_cfg.episode_length):
     with torch.no_grad():
       actions = policy(obs_torch)

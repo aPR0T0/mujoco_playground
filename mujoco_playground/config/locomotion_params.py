@@ -105,6 +105,7 @@ def brax_ppo_config(env_name: str) -> config_dict.ConfigDict:
   elif env_name in (
       "BerkeleyHumanoidJoystickFlatTerrain",
       "BerkeleyHumanoidJoystickRoughTerrain",
+      "Mini2Joystick",
   ):
     rl_config.num_timesteps = 150_000_000
     rl_config.num_evals = 15
@@ -210,6 +211,7 @@ def rsl_rl_config(env_name: str) -> config_dict.ConfigDict:
   if env_name in (
       "Go1Getup",
       "BerkeleyHumanoidJoystickFlatTerrain",
+      "Mini2Joystick",
       "G1Joystick",
       "Go1JoystickFlatTerrain",
   ):

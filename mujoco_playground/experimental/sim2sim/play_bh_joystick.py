@@ -114,7 +114,7 @@ def load_callback(model=None, data=None):
   model.opt.timestep = sim_dt
 
   policy = OnnxController(
-      policy_path=(_ONNX_DIR / "bh_policy.onnx").as_posix(),
+      policy_path=(_ONNX_DIR / "bh_policy3.onnx").as_posix(),
       default_angles=np.array(model.keyframe("home").qpos[7:]),
       ctrl_dt=ctrl_dt,
       n_substeps=n_substeps,
@@ -130,4 +130,4 @@ def load_callback(model=None, data=None):
 
 
 if __name__ == "__main__":
-  viewer.launch(loader=load_callback)
+  viewer.launch(loader=load_callback, show_left_ui=False, show_right_ui=False)
